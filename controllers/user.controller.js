@@ -7,12 +7,17 @@ import cloudinary from "../utils/cloudinary.js";
 export const register = async (req, res) => {
   try {
     const { fullname, email, phoneNumber, password, role } = req.body;
+
     if (!fullname || !email || !phoneNumber || !password || !role) {
       return res.status(400).json({
-        message: "Something is  missing",
+        message: "Something is missing",
         success: false,
       });
     }
+    const file = req.file;
+    const fileUri = getDataUri(file);
+    const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+
     const user = await User.findOne({ email });
     if (user) {
       return res.status(400).json({
@@ -28,6 +33,9 @@ export const register = async (req, res) => {
       phoneNumber,
       password: hashedPassword,
       role,
+      profile: {
+        profilePhoto: cloudResponse.secure_url,
+      },
     });
 
     return res.status(201).json({
@@ -41,9 +49,10 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
+
     if (!email || !password || !role) {
       return res.status(400).json({
-        message: "Something is  missing",
+        message: "Something is missing",
         success: false,
       });
     }
@@ -61,7 +70,7 @@ export const login = async (req, res) => {
         success: false,
       });
     }
-    //check role is correct or not
+    // check role is correct or not
     if (role !== user.role) {
       return res.status(400).json({
         message: "Account doesn't exist with current role.",
@@ -114,16 +123,9 @@ export const logout = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const { fullname, email, phoneNumber, bio, skills } = req.body;
+
     const file = req.file;
-    // if (!fullname || !email || !phoneNumber || !bio || !skills) {
-    //   return res.status(400).json({
-    //     message: "Something is  missing",
-    //     success: false,
-    //   });
-    // }
-
-    // cloudinary will come here later...
-
+    // cloudinary 
     const fileUri = getDataUri(file);
     const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
 
@@ -131,8 +133,7 @@ export const updateProfile = async (req, res) => {
     if (skills) {
       skillsArray = skills.split(",");
     }
-
-    const userId = req.id; //middleware authentication
+    const userId = req.id; // middleware authentication
     let user = await User.findById(userId);
 
     if (!user) {
@@ -141,25 +142,17 @@ export const updateProfile = async (req, res) => {
         success: false,
       });
     }
-
-    //updating data
+    // updating data
     if (fullname) user.fullname = fullname;
     if (email) user.email = email;
     if (phoneNumber) user.phoneNumber = phoneNumber;
-    if (bio) user.bio = bio;
     if (bio) user.profile.bio = bio;
     if (skills) user.profile.skills = skillsArray;
 
-    // (user.fullname = fullname),
-    //   (user.email = email),
-    //   (user.phoneNumber = phoneNumber),
-    //   (user.profile.bio = bio),
-    //   (user.profile.skills = skillsArray);
-
-    //resume will come here later...
-    if(cloudResponse){
-      user.profile.resume = cloudResponse.secure_url //save the cloudinary url
-      user.profile.resumeOriginalName = file.originalname //save the original file name
+    // resume comes later here...
+    if (cloudResponse) {
+      user.profile.resume = cloudResponse.secure_url; // save the cloudinary url
+      user.profile.resumeOriginalName = file.originalname; // Save the original file name
     }
 
     await user.save();
