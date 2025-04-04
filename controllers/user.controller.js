@@ -3,6 +3,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import getDataUri from "../utils/datauri.js";
 import cloudinary from "../utils/cloudinary.js";
+import { Job } from "../models/job.model.js";
+import { Application } from "../models/application.model.js";
+import { calculateMatch } from "../utils/matchSkills.util.js";
 
 export const register = async (req, res) => {
   try {
@@ -35,6 +38,7 @@ export const register = async (req, res) => {
       role,
       profile: {
         profilePhoto: cloudResponse.secure_url,
+        autoApply: false, // Default to false for new users
       },
     });
 
@@ -44,8 +48,13 @@ export const register = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
+
 export const login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
@@ -108,8 +117,13 @@ export const login = async (req, res) => {
       });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
+
 export const logout = async (req, res) => {
   try {
     return res.status(200).cookie("token", "", { maxAge: 0 }).json({
@@ -118,14 +132,18 @@ export const logout = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
+
 export const updateProfile = async (req, res) => {
   try {
-    const { fullname, email, phoneNumber, bio, skills } = req.body;
-
+    const { fullname, email, phoneNumber, bio, skills, autoApply } = req.body;
     const file = req.file;
-    // cloudinary 
+    
     const fileUri = getDataUri(file);
     const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
 
@@ -133,7 +151,7 @@ export const updateProfile = async (req, res) => {
     if (skills) {
       skillsArray = skills.split(",");
     }
-    const userId = req.id; // middleware authentication
+    const userId = req.id;
     let user = await User.findById(userId);
 
     if (!user) {
@@ -142,20 +160,42 @@ export const updateProfile = async (req, res) => {
         success: false,
       });
     }
-    // updating data
+
+    // Update fields
     if (fullname) user.fullname = fullname;
     if (email) user.email = email;
     if (phoneNumber) user.phoneNumber = phoneNumber;
     if (bio) user.profile.bio = bio;
     if (skills) user.profile.skills = skillsArray;
+    if (autoApply !== undefined) user.profile.autoApply = autoApply;
 
-    // resume comes later here...
     if (cloudResponse) {
-      user.profile.resume = cloudResponse.secure_url; // save the cloudinary url
-      user.profile.resumeOriginalName = file.originalname; // Save the original file name
+      user.profile.resume = cloudResponse.secure_url;
+      user.profile.resumeOriginalName = file.originalname;
     }
 
     await user.save();
+
+    // Auto-apply to matching jobs if enabled and skills were updated
+    if (skills && user.profile.autoApply && user.profile.skills?.length > 0) {
+      const jobs = await Job.find({});
+      for (const job of jobs) {
+        const matchPercent = calculateMatch(user.profile.skills, job.requirements);
+        if (matchPercent >= 70) {
+          const existingApplication = await Application.findOne({
+            job: job._id,
+            applicant: user._id,
+          });
+          if (!existingApplication) {
+            await Application.create({
+              job: job._id,
+              applicant: user._id,
+              status: "pending",
+            });
+          }
+        }
+      }
+    }
 
     user = {
       _id: user._id,
@@ -167,11 +207,16 @@ export const updateProfile = async (req, res) => {
     };
 
     return res.status(200).json({
-      message: "Profile updated successfully.",
+      message: "Profile updated successfully." + 
+        (skills && user.profile.autoApply ? " Auto-applied to matching jobs!" : ""),
       user,
       success: true,
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };

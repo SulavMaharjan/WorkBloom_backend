@@ -1,5 +1,7 @@
 import { Application } from "../models/application.model.js";
 import { Job } from "../models/job.model.js";
+import { User } from "../models/user.model.js";
+import { calculateMatch } from "../utils/matchSkills.util.js";
 
 export const applyJob = async (req, res) => {
   try {
@@ -11,7 +13,8 @@ export const applyJob = async (req, res) => {
         success: false,
       });
     }
-    //check if user has already applied for the job
+    
+    // Check if user has already applied for the job
     const existingApplication = await Application.findOne({
       job: jobId,
       applicant: userId,
@@ -19,37 +22,52 @@ export const applyJob = async (req, res) => {
 
     if (existingApplication) {
       return res.status(400).json({
-        message: "You have already applied for this jobs",
+        message: "You have already applied for this job",
         success: false,
       });
     }
 
-    //check if the jobs exists
+    // Check if the job exists
     const job = await Job.findById(jobId);
-
     if (!job) {
       return res.status(404).json({
         message: "Job not found",
         success: false,
       });
     }
-    //create a new application
+
+    // Check if this is an auto-apply eligible application
+    const user = await User.findById(userId);
+    const isAutoApplied = user.profile.autoApply && 
+                         user.profile.skills?.length > 0 &&
+                         calculateMatch(user.profile.skills, job.requirements) >= 70;
+
+    // Create a new application
     const newApplication = await Application.create({
       job: jobId,
       applicant: userId,
+      status: isAutoApplied ? 'pending' : 'pending' // Can differentiate here if needed
     });
 
     job.applications.push(newApplication._id);
     await job.save();
+
     return res.status(201).json({
-      message: "Job applied successfully.",
+      message: isAutoApplied 
+        ? "Job auto-applied successfully based on your profile!" 
+        : "Job applied successfully.",
       success: true,
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
 
+// Keep all other functions exactly the same as they were
 export const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.id;
@@ -77,9 +95,13 @@ export const getAppliedJobs = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
-//admin will see how many user has applied
+
 export const getApplicants = async (req, res) => {
   try {
     const jobId = req.params.id;
@@ -102,6 +124,10 @@ export const getApplicants = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
 
@@ -116,17 +142,14 @@ export const updateStatus = async (req, res) => {
       });
     }
 
-    //find the application by application id
-
     const application = await Application.findOne({ _id: applicationId });
     if (!application) {
-      return req.status(404).json({
+      return res.status(404).json({
         message: "Application not found.",
         success: false,
       });
     }
 
-    //update the status
     application.status = status.toLowerCase();
     await application.save();
 
@@ -136,5 +159,9 @@ export const updateStatus = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
   }
 };
