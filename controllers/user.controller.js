@@ -38,7 +38,7 @@ export const register = async (req, res) => {
       role,
       profile: {
         profilePhoto: cloudResponse.secure_url,
-        autoApply: false, // Default to false for new users
+        autoApply: false,
       },
     });
 
@@ -79,7 +79,6 @@ export const login = async (req, res) => {
         success: false,
       });
     }
-    // check role is correct or not
     if (role !== user.role) {
       return res.status(400).json({
         message: "Account doesn't exist with current role.",
@@ -143,7 +142,7 @@ export const updateProfile = async (req, res) => {
   try {
     const { fullname, email, phoneNumber, bio, skills, autoApply } = req.body;
     const file = req.file;
-    
+
     const fileUri = getDataUri(file);
     const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
 
@@ -161,13 +160,16 @@ export const updateProfile = async (req, res) => {
       });
     }
 
+    // Check if autoApply is being enabled now (was false, now true)
+    const isAutoApplyEnabled = !user.profile.autoApply && autoApply === "true";
+
     // Update fields
     if (fullname) user.fullname = fullname;
     if (email) user.email = email;
     if (phoneNumber) user.phoneNumber = phoneNumber;
     if (bio) user.profile.bio = bio;
     if (skills) user.profile.skills = skillsArray;
-    if (autoApply !== undefined) user.profile.autoApply = autoApply;
+    if (autoApply !== undefined) user.profile.autoApply = autoApply === "true";
 
     if (cloudResponse) {
       user.profile.resume = cloudResponse.secure_url;
@@ -176,25 +178,49 @@ export const updateProfile = async (req, res) => {
 
     await user.save();
 
-    // Auto-apply to matching jobs if enabled and skills were updated
-    if (skills && user.profile.autoApply && user.profile.skills?.length > 0) {
+    // Auto-apply to matching jobs if:
+    // 1. Skills were updated and autoApply is enabled, OR
+    // 2. AutoApply was just enabled now
+    if (
+      (skills && user.profile.autoApply && user.profile.skills?.length > 0) ||
+      (isAutoApplyEnabled && user.profile.skills?.length > 0)
+    ) {
       const jobs = await Job.find({});
+      let autoAppliedCount = 0;
+
       for (const job of jobs) {
-        const matchPercent = calculateMatch(user.profile.skills, job.requirements);
+        const matchPercent = calculateMatch(
+          user.profile.skills,
+          job.requirements
+        );
         if (matchPercent >= 70) {
           const existingApplication = await Application.findOne({
             job: job._id,
             applicant: user._id,
           });
           if (!existingApplication) {
-            await Application.create({
+            const newApplication = await Application.create({
               job: job._id,
               applicant: user._id,
               status: "pending",
+              isAutoApplied: true,
             });
+            job.applications.push(newApplication._id);
+            await job.save();
+            autoAppliedCount++;
           }
         }
       }
+
+      return res.status(200).json({
+        message: `Profile updated successfully. ${
+          autoAppliedCount > 0
+            ? `Auto-applied to ${autoAppliedCount} matching jobs!`
+            : ""
+        }`,
+        user,
+        success: true,
+      });
     }
 
     user = {
@@ -207,8 +233,7 @@ export const updateProfile = async (req, res) => {
     };
 
     return res.status(200).json({
-      message: "Profile updated successfully." + 
-        (skills && user.profile.autoApply ? " Auto-applied to matching jobs!" : ""),
+      message: "Profile updated successfully.",
       user,
       success: true,
     });

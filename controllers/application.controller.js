@@ -13,7 +13,7 @@ export const applyJob = async (req, res) => {
         success: false,
       });
     }
-    
+
     // Check if user has already applied for the job
     const existingApplication = await Application.findOne({
       job: jobId,
@@ -38,23 +38,25 @@ export const applyJob = async (req, res) => {
 
     // Check if this is an auto-apply eligible application
     const user = await User.findById(userId);
-    const isAutoApplied = user.profile.autoApply && 
-                         user.profile.skills?.length > 0 &&
-                         calculateMatch(user.profile.skills, job.requirements) >= 70;
+    const isAutoApplied =
+      user.profile.autoApply &&
+      user.profile.skills?.length > 0 &&
+      calculateMatch(user.profile.skills, job.requirements) >= 70;
 
     // Create a new application
     const newApplication = await Application.create({
       job: jobId,
       applicant: userId,
-      status: isAutoApplied ? 'pending' : 'pending' // Can differentiate here if needed
+      status: "pending",
+      isAutoApplied: isAutoApplied,
     });
 
     job.applications.push(newApplication._id);
     await job.save();
 
     return res.status(201).json({
-      message: isAutoApplied 
-        ? "Job auto-applied successfully based on your profile!" 
+      message: isAutoApplied
+        ? "Job auto-applied successfully based on your profile!"
         : "Job applied successfully.",
       success: true,
     });
@@ -67,7 +69,6 @@ export const applyJob = async (req, res) => {
   }
 };
 
-// Keep all other functions exactly the same as they were
 export const getAppliedJobs = async (req, res) => {
   try {
     const userId = req.id;
