@@ -245,3 +245,76 @@ export const updateProfile = async (req, res) => {
     });
   }
 };
+
+export const bookmarkJob = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const userId = req.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+        success: false,
+      });
+    }
+
+    // Check if job is already bookmarked
+    const isBookmarked = user.bookmarkedJobs.includes(jobId);
+
+    if (isBookmarked) {
+      // Remove bookmark
+      user.bookmarkedJobs = user.bookmarkedJobs.filter(
+        (id) => id.toString() !== jobId
+      );
+      await user.save();
+
+      return res.status(200).json({
+        message: "Job removed from bookmarks",
+        isBookmarked: false,
+        success: true,
+      });
+    } else {
+      // Add bookmark
+      user.bookmarkedJobs.push(jobId);
+      await user.save();
+
+      return res.status(200).json({
+        message: "Job bookmarked successfully",
+        isBookmarked: true,
+        success: true,
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
+  }
+};
+
+export const getBookmarkedJobs = async (req, res) => {
+  try {
+    const userId = req.id;
+
+    const user = await User.findById(userId).populate("bookmarkedJobs");
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+        success: false,
+      });
+    }
+
+    return res.status(200).json({
+      bookmarkedJobs: user.bookmarkedJobs,
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      message: "Internal server error",
+      success: false,
+    });
+  }
+};

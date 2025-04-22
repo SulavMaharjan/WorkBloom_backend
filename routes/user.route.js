@@ -4,6 +4,8 @@ import {
   logout,
   register,
   updateProfile,
+  bookmarkJob,
+  getBookmarkedJobs,
 } from "../controllers/user.controller.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 import { singleUpload } from "../middlewares/multer.js";
@@ -16,5 +18,7 @@ router.route("/logout").get(logout);
 router
   .route("/profile/update")
   .post(isAuthenticated, singleUpload, updateProfile);
+router.route("/bookmark/:jobId").post(isAuthenticated, bookmarkJob);
+router.route("/bookmarks").get(isAuthenticated, getBookmarkedJobs);
 
 export default router;

@@ -33,8 +33,14 @@ const userSchema = new mongoose.Schema(
         type: String,
         default: "",
       },
-      autoApply: { type: Boolean, default: false }, // New field
+      autoApply: { type: Boolean, default: false },
     },
+    bookmarkedJobs: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Job",
+      },
+    ],
   },
   { timestamps: true }
 );
