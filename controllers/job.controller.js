@@ -74,7 +74,7 @@ export const postJob = async (req, res) => {
     await job.save();
 
     return res.status(201).json({
-      message: "New job created successfully and auto-applied to matching users!",
+      message: "New job created successfully and will auto-apply to matching users!",
       job,
       success: true,
     });
